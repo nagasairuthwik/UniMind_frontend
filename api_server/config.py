@@ -14,12 +14,19 @@ else:
         pass
 
 
+def _norm_gemini_key(raw: str) -> str:
+    """Strip BOM/spaces; keys must not be modified beyond that."""
+    if not raw:
+        return ""
+    return str(raw).replace("\ufeff", "").strip()
+
+
 def _parse_gemini_props_file(path: Path) -> list:
-    """Read GEMINI_API_KEYS (comma-separated) or GEMINI_API_KEY from a .properties file."""
+    """Read GEMINI_API_KEYS (comma-separated) and GEMINI_API_KEY from a .properties file."""
     if not path.is_file():
         return []
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8-sig")
     except OSError:
         return []
     props = {}
@@ -29,11 +36,21 @@ def _parse_gemini_props_file(path: Path) -> list:
             continue
         k, _, v = line.partition("=")
         props[k.strip()] = v.strip()
+    out = []
+    seen = set()
+    primary = _norm_gemini_key(props.get("GEMINI_API_KEY") or "")
+    if primary:
+        seen.add(primary)
+        out.append(primary)
     raw = (props.get("GEMINI_API_KEYS") or "").strip()
-    if raw:
-        return [p.strip() for p in raw.split(",") if p.strip()]
-    single = (props.get("GEMINI_API_KEY") or "").strip()
-    return [single] if single else []
+    for part in raw.split(",") if raw else []:
+        kk = _norm_gemini_key(part)
+        if kk and kk not in seen:
+            seen.add(kk)
+            out.append(kk)
+    if out:
+        return out
+    return [primary] if primary else []
 
 
 def _root_gemini_keys_file_list():
@@ -55,11 +72,22 @@ def _local_properties_gemini_list():
 
 
 def _env_gemini_key_list():
+    """Env: primary key first, then comma list, then GOOGLE_API_KEY — all merged, deduped."""
+    seen = set()
+    out = []
+
+    def add(k: str):
+        kk = _norm_gemini_key(k)
+        if kk and kk not in seen:
+            seen.add(kk)
+            out.append(kk)
+
+    for name in ("GEMINI_API_KEY", "GEMINI_AI_API_KEY", "GOOGLE_API_KEY"):
+        add(os.environ.get(name) or "")
     raw = (os.environ.get("GEMINI_API_KEYS") or "").strip()
-    if raw:
-        return [k.strip() for k in raw.split(",") if k.strip()]
-    single = os.environ.get("GEMINI_API_KEY") or os.environ.get("GEMINI_AI_API_KEY") or ""
-    return [single] if single else []
+    for part in raw.split(",") if raw else []:
+        add(part)
+    return out
 
 
 def gemini_api_key_candidates():

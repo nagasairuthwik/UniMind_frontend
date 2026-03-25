@@ -19,6 +19,7 @@ import random
 import smtplib
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -43,15 +44,44 @@ app = Flask(__name__)
 # Allow both mobile app and website frontends (running on different ports / origins)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+_GEMINI_KEY_COUNT = len(gemini_api_key_candidates())
+print(
+    f"[UniMind] Gemini: {_GEMINI_KEY_COUNT} API key candidate(s). "
+    "Diagnostics: GET /ai/gemini-sources and GET /ai/test-gemini"
+)
+
 # ---------- Gemini AI client (shared for app + website) ----------
 # Website pages call /ai/* on this server; they never embed keys. Keys: api_server/.env
 
-# Same REST surface as Android GeminiApi.kt — some accounts only work on certain models.
+# Same REST surface as Android GeminiApi.kt — try several IDs (AI Studio availability varies by account).
 _GEMINI_MODEL_NAMES = (
     "gemini-2.5-flash",
     "gemini-2.0-flash",
+    "gemini-2.0-flash-001",
     "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
 )
+
+_GEMINI_KEY_HELP = (
+    "Gemini API key is invalid or expired (Google rejected every key we tried). "
+    "Create a new key at https://aistudio.google.com/apikey — set GEMINI_API_KEY and/or GEMINI_API_KEYS in "
+    "api_server/.env (website reads .env first), save, restart python app.py. "
+    "Open http://127.0.0.1:5000/web/ai-chat.html (not file://)."
+)
+
+
+def _is_gemini_api_key_rejection(err) -> bool:
+    t = str(err).lower()
+    return any(
+        s in t
+        for s in (
+            "api_key_invalid",
+            "api key expired",
+            "invalid api key",
+            "please renew the api key",
+            "expired api key",
+        )
+    )
 
 
 def _gemini_rest_generate_text(prompt: str) -> str:
@@ -65,9 +95,10 @@ def _gemini_rest_generate_text(prompt: str) -> str:
     last_err = None
     for api_key in keys:
         for model in _GEMINI_MODEL_NAMES:
+            qkey = urllib.parse.quote(api_key, safe="")
             url = (
                 "https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{model}:generateContent?key={api_key}"
+                f"{model}:generateContent?key={qkey}"
             )
             req = urllib.request.Request(
                 url,
@@ -98,7 +129,9 @@ def _gemini_rest_generate_text(prompt: str) -> str:
             except Exception as e:
                 last_err = e
                 continue
-    raise RuntimeError(last_err or "REST Gemini failed")
+    if _is_gemini_api_key_rejection(last_err):
+        raise RuntimeError(_GEMINI_KEY_HELP)
+    raise RuntimeError(str(last_err) if last_err else "REST Gemini failed")
 
 
 def _with_gemini_model(func):
@@ -127,14 +160,8 @@ def _with_gemini_model(func):
     if last_exc is None:
         raise RuntimeError("All Gemini API keys failed.")
 
-    err_text = str(last_exc).lower()
-    if "api_key_invalid" in err_text or "api key expired" in err_text or "invalid api key" in err_text:
-        raise RuntimeError(
-            "Gemini API key is invalid or expired (Google rejected every key we tried). "
-            "Create a new key at https://aistudio.google.com/apikey — set GEMINI_API_KEY and/or GEMINI_API_KEYS in "
-            "api_server/.env (website uses those first), save, restart python app.py. "
-            "Open the site at http://127.0.0.1:5000/web/ai-chat.html not as a file:// path."
-        ) from last_exc
+    if _is_gemini_api_key_rejection(last_exc):
+        raise RuntimeError(_GEMINI_KEY_HELP) from last_exc
     raise RuntimeError(
         f"Gemini failed after trying {len(keys)} key(s). Last error: {last_exc}"
     ) from last_exc
@@ -1636,6 +1663,26 @@ def ai_gemini_sources():
         "merged_unique_key_count": len(gemini_api_key_candidates()),
         "order": "env → local.properties → gemini_keys.properties → gradle.properties",
     }), 200
+
+
+@app.route("/ai/test-gemini", methods=["GET"])
+def ai_test_gemini():
+    """Quick check that at least one key × model can generate text (no keys returned)."""
+    try:
+        reply = gemini_generate_plain_text('Reply with one word only: "pong".')
+        text = (reply or "").strip().lower()
+        return jsonify({
+            "success": True,
+            "ok": bool(text),
+            "reply_preview": (reply or "")[:120],
+            "hint": "If ok is false, keys may be invalid or Generative Language API not enabled for the project.",
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "ok": False,
+            "message": str(e),
+        }), 200
 
 
 @app.route("/ai/chat", methods=["POST"])
