@@ -107,6 +107,11 @@ class SignupActivity : ComponentActivity() {
                 passwordEdit.requestFocus()
                 return@setOnClickListener
             }
+            if (!isStrongPassword(password)) {
+                passwordEdit.error = getString(R.string.signup_password_requirement)
+                passwordEdit.requestFocus()
+                return@setOnClickListener
+            }
             if (confirmPassword.isEmpty()) {
                 confirmPasswordEdit.error = "Re-enter your password"
                 confirmPasswordEdit.requestFocus()
@@ -253,5 +258,14 @@ class SignupActivity : ComponentActivity() {
         if (token != null) {
             imm?.hideSoftInputFromWindow(token, 0)
         }
+    }
+
+    private fun isStrongPassword(password: String): Boolean {
+        if (password.length < 8) return false
+        val hasUpper = password.any { it.isUpperCase() }
+        val hasLower = password.any { it.isLowerCase() }
+        val hasDigit = password.any { it.isDigit() }
+        val hasSpecial = password.any { !it.isLetterOrDigit() }
+        return hasUpper && hasLower && hasDigit && hasSpecial
     }
 }

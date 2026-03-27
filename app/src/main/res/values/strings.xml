@@ -837,7 +837,7 @@
     <string name="signup_menu_desc">More options</string>
     <string name="signup_password">Password</string>
     <string name="signup_password_hint">Create a password</string>
-    <string name="signup_password_requirement">Password must be at least 8 characters with letters and numbers</string>
+    <string name="signup_password_requirement">Password must be at least 8 characters and include uppercase, lowercase, number, and special character</string>
     <string name="signup_password_toggle_desc">Show or hide password</string>
     <string name="signup_confirm_password">Confirm Password</string>
     <string name="signup_confirm_password_hint">Re-enter your password</string>

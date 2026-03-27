@@ -13,6 +13,7 @@ Set your MySQL password below in MYSQL_CONFIG (default XAMPP: user root, passwor
 """
 import os
 import json
+import re
 import traceback
 import uuid
 import random
@@ -574,6 +575,12 @@ def signup():
         return jsonify({"success": False, "message": "Email is required"}), 400
     if not password:
         return jsonify({"success": False, "message": "Password is required"}), 400
+    # Strong password policy: min 8, uppercase, lowercase, number, special char.
+    if not re.match(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$", password):
+        return jsonify({
+            "success": False,
+            "message": "Password must be at least 8 characters and include uppercase, lowercase, number, and special character",
+        }), 400
 
     try:
         new_id, created_at = store_signup_in_db(full_name, email, password)

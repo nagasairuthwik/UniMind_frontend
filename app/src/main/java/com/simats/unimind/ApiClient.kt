@@ -221,7 +221,7 @@ object ApiClient {
      * On PC: run "ipconfig" (Windows) and use the IPv4 Address (e.g. 192.168.1.5 or 10.0.0.5).
      * Phone and PC must be on the same Wi-Fi. URL must end with /
      */
-    private const val BASE_URL = "http://10.221.3.106:5000/"
+    private const val BASE_URL = "http://10.221.3.106:5000"
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
